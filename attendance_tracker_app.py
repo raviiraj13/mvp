@@ -156,6 +156,7 @@ if df is not None:
     st.write(f"✅ You need to attend **{classes_needed} more classes** in {subject} to reach {target}% attendance.")
 
     # Target Aggregate Attendance
+    st.subheader("🎯 Target Attendance per Subject")
     target_aggregate = st.number_input("Enter target aggregate attendance (%)", min_value=0,max_value=100,value=75)
     aggregate_needed = target_attendance(total_present,total_classes,target_aggregate)
     st.write(f"🎯 You need to attend **{aggregate_needed} more classes overall** to reach {target_aggregate}% aggregate attendance.")
