@@ -18,14 +18,21 @@ def load_data(uploaded_file):
     return df
 
 def plot_bar_chart(df):
-    plt.figure(figsize=(10,5))
+    plt.figure(figsize=(8,4))  # slightly smaller width for mobile
     barplot = sns.barplot(x='Subject', y='Present', data=df, palette='Set2')
+    
+    # Annotate bars
     for p in barplot.patches:
         barplot.annotate(f'{int(p.get_height())}', 
                          (p.get_x() + p.get_width()/2, p.get_height()),
-                         ha='center', va='bottom')
-    plt.xticks(rotation=45)
-    plt.title("Present Classes per Subject")
+                         ha='center', va='bottom', fontsize=9)
+    
+    # Rotate x labels and adjust font size
+    plt.xticks(rotation=60, ha='right', fontsize=9)
+    plt.yticks(fontsize=9)
+    
+    plt.title("Present Classes per Subject", fontsize=12)
+    plt.tight_layout()  # prevent overlapping
     st.pyplot(plt)
     plt.close()
 
