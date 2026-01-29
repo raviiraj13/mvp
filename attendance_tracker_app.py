@@ -18,18 +18,17 @@ def load_data(uploaded_file):
     return df
 
 def plot_bar_chart(df):
-    plt.figure(figsize=(7,4))  # smaller width and height
+    plt.figure(figsize=(10,5))
     barplot = sns.barplot(x='Subject', y='Present', data=df, palette='Set2')
     for p in barplot.patches:
         barplot.annotate(f'{int(p.get_height())}', 
                          (p.get_x() + p.get_width()/2, p.get_height()),
-                         ha='center', va='bottom', fontsize=10)
-    plt.xticks(rotation=45, fontsize=10)
-    plt.yticks(fontsize=10)
-    plt.title("Present Classes per Subject", fontsize=12)
-    plt.tight_layout()
+                         ha='center', va='bottom')
+    plt.xticks(rotation=45)
+    plt.title("Present Classes per Subject")
     st.pyplot(plt)
     plt.close()
+
 
 def plot_donut_charts(df):
     n_rows = (len(df)+2)//3
