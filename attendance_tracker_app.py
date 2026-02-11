@@ -1,183 +1,328 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 from fpdf import FPDF
 import sympy as sp
-import io
+import math
+import re
 
-st.set_page_config(page_title="Attendance Tracker", layout="wide")
-st.title("📊 Attendance Tracker")
-st.write("Upload your attendance CSV file or paste a CSV URL with columns: Subject, Present, Absent.")
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(
+    page_title="Smart Attendance Optimizer",
+    layout="wide"
+)
 
-# -------------------------- Functions --------------------------
-def load_data(uploaded_file):
-    df = pd.read_csv(uploaded_file)
-    df['Total'] = df['Present'] + df['Absent']
-    df['Attendance%'] = df['Present'] / df['Total'] * 100
+# ---------------- THEME ----------------
+st.markdown("""
+<style>
+
+.stApp {
+    background: linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+    color: white;
+}
+
+[data-testid="stMetric"] {
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 15px;
+}
+
+.stDataFrame {
+    background: rgba(255,255,255,0.03);
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+st.title("🎯 Smart Attendance Optimizer")
+st.caption("Supports OD, Makeup, Optimization, and PDF export")
+
+# ---------------- COLORS ----------------
+PRESENT_COLOR = "#00FFA3"
+ABSENT_COLOR = "#FF4B4B"
+OD_COLOR = "#00C8FF"
+
+# ---------------- PARSER ----------------
+def smart_parse_pasted_data(text):
+
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    rows = []
+
+    for line in lines:
+
+        if "subject code" in line.lower():
+            continue
+
+        parts = line.split("\t")
+
+        if len(parts) < 9:
+            continue
+
+        try:
+
+            subject = parts[2]
+            present = int(parts[4])
+            od = int(parts[5])
+            makeup = int(parts[6])
+            absent = int(parts[7])
+
+            rows.append([
+                subject,
+                present,
+                od,
+                makeup,
+                absent
+            ])
+
+        except:
+            continue
+
+    if not rows:
+        return None
+
+    df = pd.DataFrame(
+        rows,
+        columns=[
+            "Subject",
+            "Present",
+            "OD",
+            "Makeup",
+            "Absent"
+        ]
+    )
+
     return df
 
-def plot_bar_chart(df):
-    plt.figure(figsize=(8,4))  # slightly smaller width for mobile
-    barplot = sns.barplot(x='Subject', y='Present', data=df, palette='Set2')
-    
-    # Annotate bars
-    for p in barplot.patches:
-        barplot.annotate(f'{int(p.get_height())}', 
-                         (p.get_x() + p.get_width()/2, p.get_height()),
-                         ha='center', va='bottom', fontsize=9)
-    
-    # Rotate x labels and adjust font size
-    plt.xticks(rotation=60, ha='right', fontsize=9)
-    plt.yticks(fontsize=9)
-    
-    plt.title("Present Classes per Subject", fontsize=12)
-    plt.tight_layout()  # prevent overlapping
-    st.pyplot(plt)
-    plt.close()
+
+# ---------------- COMPUTE ----------------
+def compute_attendance(df):
+
+    df["Effective Present"] = (
+        df["Present"] +
+        df["OD"] +
+        df["Makeup"]
+    )
+
+    df["Total"] = (
+        df["Present"] +
+        df["OD"] +
+        df["Makeup"] +
+        df["Absent"]
+    )
+
+    df["Attendance%"] = (
+        df["Effective Present"] /
+        df["Total"] * 100
+    ).round(2)
+
+    df["Status"] = df["Attendance%"].apply(
+        lambda x: "🟢 Safe" if x >= 75 else "🔴 Risk"
+    )
+
+    return df.sort_values("Attendance%")
 
 
-def plot_donut_charts(df):
-    n_rows = (len(df)+2)//3
-    fig, axes = plt.subplots(n_rows, 3, figsize=(9, n_rows*3))  # smaller figure
-    axes = axes.flatten()
-    for i, ax in enumerate(axes):
-        if i >= len(df):
-            ax.axis('off')
-            continue
-        row = df.iloc[i]
-        values = [row['Present'], row['Absent']]
-        ax.pie(values, labels=['',''], colors=['#1abc9c','#f39c12'],
-               startangle=90, wedgeprops={'width':0.4,'edgecolor':'white'})
-        ax.text(0,0,f"{row['Attendance%']:.0f}%", ha='center', va='center', fontsize=10, fontweight='bold')
-        ax.set_title(row['Subject'], fontsize=10, fontweight='bold')
-    plt.tight_layout()
+# ---------------- MATH ----------------
+def classes_to_attend(present, total, target):
+
+    x = sp.symbols("x")
+
+    sol = sp.solve(
+        (present + x)/(total + x) - target/100,
+        x
+    )
+
+    if sol:
+        return max(0, math.ceil(sol[0]))
+
+    return 0
+
+
+def classes_can_leave(present, total, target):
+
+    leave = 0
+
+    while total + leave > 0 and (present/(total+leave))*100 >= target:
+
+        leave += 1
+
+    return max(0, leave-1)
+
+
+# ---------------- CHART ----------------
+def plot_overall(present, absent, od):
+
+    fig, ax = plt.subplots()
+
+    ax.pie(
+        [present, absent, od],
+        labels=["Present","Absent","OD"],
+        colors=[PRESENT_COLOR, ABSENT_COLOR, OD_COLOR],
+        autopct="%1.1f%%"
+    )
+
+    ax.set_title("Overall Attendance Distribution")
+
     st.pyplot(fig)
-    plt.close()
 
-def target_attendance(present, total_classes, target_percent):
-    x = sp.symbols('x')
-    solution = sp.solve((present + x)/(total_classes + x) - target_percent/100, x)
-    return int(solution[0]) if solution else 0
 
-def plot_pie_chart(subject, present, absent):
-    values = [present, absent]
-    labels = ['Present', 'Absent']
-    colors = ['#1abc9c','#f39c12']
-    plt.figure(figsize=(5,5))  # smaller pie chart
-    plt.pie(values, labels=labels, autopct='%1.1f%%', startangle=90,
-            colors=colors, wedgeprops={'edgecolor':'white'})
-    plt.title(f"Attendance for {subject}", fontsize=12)
-    st.pyplot(plt)
-    plt.close()
+def plot_subject_chart(df):
 
-def generate_pdf(df, subject, target_percent, classes_needed, total_present, total_absent, target_aggregate):
-    pdf = FPDF('P','mm','A4')
+    fig, ax = plt.subplots(figsize=(10,4))
+
+    ax.bar(
+        df["Subject"],
+        df["Attendance%"],
+        color=PRESENT_COLOR
+    )
+
+    plt.xticks(rotation=60)
+
+    ax.set_ylabel("Attendance %")
+
+    st.pyplot(fig)
+
+
+# ---------------- PDF ----------------
+def generate_pdf(df):
+
+    pdf = FPDF()
+
     pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=10)
-    pdf.set_font("Arial",'B',20)
-    pdf.cell(0,10,"Attendance Report",ln=True,align='C')
-    pdf.ln(10)
 
-    pdf.set_font("Arial",'B',14)
-    pdf.cell(0,8,"Aggregate Attendance",ln=True)
-    pdf.set_font("Arial",'',12)
-    total_classes = total_present + total_absent
-    overall_attendance = total_present/total_classes*100 if total_classes>0 else 0
-    pdf.cell(0,6,f"Total Present: {total_present}",ln=True)
-    pdf.cell(0,6,f"Total Absent: {total_absent}",ln=True)
-    pdf.cell(0,6,f"Overall Attendance: {overall_attendance:.1f}%",ln=True)
-    pdf.ln(5)
+    pdf.set_font("Arial","B",16)
 
-    pdf.set_font("Arial",'B',14)
-    pdf.cell(0,8,"Subjects Attendance Data",ln=True)
-    pdf.set_font("Arial",'',12)
-    for idx,r in df.iterrows():
-        pdf.cell(0,6,f"{r['Subject']}: Present {r['Present']}, Absent {r['Absent']}, Attendance {r['Attendance%']:.1f}%",ln=True)
-    pdf.ln(5)
+    pdf.cell(0,10,"Attendance Report",ln=True)
 
-    pdf.set_font("Arial",'B',14)
-    pdf.cell(0,8,"Target Attendance",ln=True)
-    pdf.set_font("Arial",'',12)
-    pdf.cell(0,6,f"Subject: {subject}",ln=True)
-    pdf.cell(0,6,f"Target: {target_percent}%",ln=True)
-    pdf.cell(0,6,f"Classes needed to reach target: {classes_needed}",ln=True)
-    pdf.cell(0,6,f"Target Aggregate Attendance: {target_aggregate}%",ln=True)
-    return pdf.output(dest='S').encode('latin-1')
+    pdf.set_font("Arial","",12)
 
-# -------------------------- Interface --------------------------
-# Option: upload or URL
-upload_option = st.radio("How do you want to provide the CSV?", ("Upload File", "CSV URL"))
+    for _,row in df.iterrows():
 
-df = None
+        pdf.cell(
+            0,8,
+            f"{row['Subject']} : {row['Attendance%']}%",
+            ln=True
+        )
 
-if upload_option == "Upload File":
-    uploaded_file = st.file_uploader("Upload CSV", type=None)  # Allow all file types
-    if uploaded_file:
-        if uploaded_file.name.endswith('.csv'):
-            df = load_data(uploaded_file)
-        else:
-            st.error("Please upload a CSV file!")
-elif upload_option == "CSV URL":
-    url = st.text_input("Enter CSV file URL")
-    if url:
-        try:
-            df = pd.read_csv(url)
-            df['Total'] = df['Present'] + df['Absent']
-            df['Attendance%'] = df['Present'] / df['Total'] * 100
-        except Exception as e:
-            st.error(f"Error loading CSV: {e}")
+    return pdf.output(dest="S").encode("latin-1")
 
-# If data is loaded
-if df is not None:
-    st.subheader("Preview")
-    st.dataframe(df)
 
-    # Aggregate Attendance
-    st.subheader("📊 Aggregate Attendance")
-    total_present = df['Present'].sum()
-    total_absent = df['Absent'].sum()
-    total_classes = total_present + total_absent
-    overall_attendance = total_present/total_classes*100 if total_classes>0 else 0
-    st.metric("Total Present", total_present)
-    st.metric("Total Absent", total_absent)
-    st.metric("Overall Attendance %", f"{overall_attendance:.1f}%")
+# ---------------- INPUT ----------------
+st.subheader("Paste Attendance Report")
 
-    # Pie chart
-    plt.figure(figsize=(5,5))
-    plt.pie([total_present,total_absent], labels=['Present','Absent'], autopct='%1.1f%%', startangle=90,
-            colors=['#1abc9c','#f39c12'], wedgeprops={'edgecolor':'white'})
-    plt.title("Aggregate Attendance", fontsize=12)
-    st.pyplot(plt)
-    plt.close()
+pasted = st.text_area("", height=300)
 
-    # Target Attendance per subject
-    st.subheader("🎯 Target Attendance per Subject")
-    target = st.number_input("Enter your target attendance (%)", min_value=0,max_value=100,value=75)
-    subject = st.selectbox("Select Subject", df['Subject'])
-    row = df[df['Subject']==subject].iloc[0]
-    present = row['Present']
-    total_subject_classes = row['Total']
-    classes_needed = target_attendance(present,total_subject_classes,target)
-    st.write(f"✅ You need to attend **{classes_needed} more classes** in {subject} to reach {target}% attendance.")
+if pasted:
 
-    # Target Aggregate Attendance
-    st.subheader("🎯 Target Attendance Aggregate")
-    target_aggregate = st.number_input("Enter target aggregate attendance (%)", min_value=0,max_value=100,value=75)
-    aggregate_needed = target_attendance(total_present,total_classes,target_aggregate)
-    st.write(f"🎯 You need to attend **{aggregate_needed} more classes overall** to reach {target_aggregate}% aggregate attendance.")
+    df = smart_parse_pasted_data(pasted)
 
-    # Pie & donut charts
-    st.subheader(f"Pie Chart for {subject}")
-    plot_pie_chart(subject,present,row['Absent'])
+    if df is None:
 
-    st.subheader("Bar Chart of Present Classes")
-    plot_bar_chart(df)
+        st.error("Invalid format")
 
-    st.subheader("Donut Charts per Subject")
-    plot_donut_charts(df)
+    else:
 
-    # PDF Download
-    st.subheader("📄 Download PDF Report")
-    pdf_bytes = generate_pdf(df, subject, target, classes_needed, total_present, total_absent, target_aggregate)
-    st.download_button("📥 Download PDF", data=pdf_bytes, file_name="attendance_report.pdf", mime="application/pdf")
+        df = compute_attendance(df)
+
+        st.subheader("Attendance Table")
+
+        st.dataframe(df, use_container_width=True)
+
+        # ---------------- AGGREGATE ----------------
+
+        total_present = df["Effective Present"].sum()
+        total_absent = df["Absent"].sum()
+        total_od = df["OD"].sum()
+
+        total = total_present + total_absent
+
+        overall = total_present / total * 100
+
+        st.subheader("Overall Metrics")
+
+        c1,c2,c3 = st.columns(3)
+
+        c1.metric("Attendance %", f"{overall:.2f}")
+        c2.metric("Present", total_present)
+        c3.metric("Absent", total_absent)
+
+        plot_overall(total_present, total_absent, total_od)
+
+        # ---------------- AGGREGATE OPTIMIZATION ----------------
+
+        st.subheader("Aggregate Optimization")
+
+        target = st.number_input(
+            "Target %",
+            min_value=0,
+            max_value=100,
+            value=75
+        )
+
+        need = classes_to_attend(
+            total_present,
+            total,
+            target
+        )
+
+        leave = classes_can_leave(
+            total_present,
+            total,
+            target
+        )
+
+        c1,c2 = st.columns(2)
+
+        c1.success(f"Attend {need} classes")
+
+        c2.warning(f"Can leave {leave} classes")
+
+
+        # ---------------- SUBJECT OPTIMIZATION ----------------
+
+        st.subheader("Subject Optimization")
+
+        subject = st.selectbox(
+            "Select Subject",
+            df["Subject"]
+        )
+
+        row = df[df["Subject"]==subject].iloc[0]
+
+        need_sub = classes_to_attend(
+            row["Effective Present"],
+            row["Total"],
+            target
+        )
+
+        leave_sub = classes_can_leave(
+            row["Effective Present"],
+            row["Total"],
+            target
+        )
+
+        c1,c2 = st.columns(2)
+
+        c1.success(f"Attend {need_sub} classes in {subject}")
+
+        c2.warning(f"Can leave {leave_sub} classes in {subject}")
+
+
+        # ---------------- CHART ----------------
+
+        st.subheader("Subject Chart")
+
+        plot_subject_chart(df)
+
+
+        # ---------------- PDF ----------------
+
+        st.subheader("Download Report")
+
+        pdf = generate_pdf(df)
+
+        st.download_button(
+            "Download PDF",
+            pdf,
+            "attendance_report.pdf"
+        )
