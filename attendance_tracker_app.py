@@ -10,9 +10,8 @@ import re
 st.set_page_config(page_title="Attendance Tracker", layout="wide")
 
 st.title("📊 Attendance Tracker")
-st.caption("Aggregate Optimizer with OD, Makeup, Bar Graph, Leave Simulator")
+st.caption("Aggregate Attendance Optimizer with OD and Makeup")
 
-# ---------------- COLORS ----------------
 PRESENT_COLOR = "#1ABC9C"
 ABSENT_COLOR = "#F39C12"
 
@@ -104,62 +103,23 @@ def classes_can_leave(present, total, target):
 
     return max(0, leave-1)
 
-# ---------------- PIE CHART ----------------
+# ---------------- AGGREGATE PIE CHART ----------------
 def plot_aggregate_pie(effective_present, total_absent):
 
-    plt.figure(figsize=(5,5))
+    plt.figure(figsize=(6,6))
 
     plt.pie(
         [effective_present, total_absent],
-        labels=["Aggregate Attendance", "Aggregate Absent"],
+        labels=[
+            f"Aggregate Attendance ({effective_present})",
+            f"Absent ({total_absent})"
+        ],
         autopct="%1.1f%%",
         colors=[PRESENT_COLOR, ABSENT_COLOR],
         startangle=90
     )
 
-    plt.title("Aggregate Attendance vs Absent")
-
-    st.pyplot(plt)
-    plt.close()
-
-# ---------------- BAR GRAPH ----------------
-def plot_aggregate_bar(effective_present, total_absent):
-
-    labels = [
-        "Aggregate Attendance",
-        "Aggregate Absent"
-    ]
-
-    values = [
-        effective_present,
-        total_absent
-    ]
-
-    plt.figure(figsize=(6,4))
-
-    bars = plt.bar(
-        labels,
-        values,
-        color=[PRESENT_COLOR, ABSENT_COLOR]
-    )
-
-    # show numbers on bars
-    for bar in bars:
-
-        height = bar.get_height()
-
-        plt.text(
-            bar.get_x() + bar.get_width()/2,
-            height,
-            str(height),
-            ha='center',
-            va='bottom',
-            fontweight='bold'
-        )
-
-    plt.title("Aggregate Attendance vs Aggregate Absent")
-
-    plt.ylabel("Number of Classes")
+    plt.title("Aggregate Attendance")
 
     st.pyplot(plt)
     plt.close()
@@ -249,20 +209,15 @@ if text:
 
     c4.metric("OD", total_od)
     c5.metric("Makeup", total_makeup)
-    c6.metric("Effective Present", effective_present)
+    c6.metric("Aggregate Attendance", effective_present)
 
     st.metric(
         "Aggregate Attendance %",
         f"{aggregate_attendance:.2f}%"
     )
 
-    # charts
+    # ONLY PIE CHART
     plot_aggregate_pie(
-        effective_present,
-        total_absent
-    )
-
-    plot_aggregate_bar(
         effective_present,
         total_absent
     )
@@ -300,7 +255,7 @@ if text:
         )
 
     # ---------------- LEAVE SIMULATOR ----------------
-    st.subheader("🎚️ Leave Simulator + Recovery Calculator")
+    st.subheader("🎚️ Leave Simulator + Recovery")
 
     leave_x = st.slider(
         "Select number of classes to leave",
@@ -328,53 +283,9 @@ if text:
     )
 
     st.metric(
-        "Classes required to recover target",
+        "Classes required to recover",
         required_after_leave
     )
-
-    final_attendance = (
-        (effective_present + required_after_leave) /
-        (new_total + required_after_leave) * 100
-    )
-
-    st.metric(
-        "Attendance after recovery",
-        f"{final_attendance:.2f}%"
-    )
-
-    # ---------------- SUBJECT TARGET ----------------
-    st.subheader("🎯 Subject-wise Target Optimizer")
-
-    subject = st.selectbox(
-        "Select Subject",
-        df["Subject"]
-    )
-
-    row = df[df["Subject"] == subject].iloc[0]
-
-    sub_need = classes_needed(
-        row["Effective Present"],
-        row["Total Classes"],
-        target
-    )
-
-    sub_leave = classes_can_leave(
-        row["Effective Present"],
-        row["Total Classes"],
-        target
-    )
-
-    if row["Attendance%"] < target:
-
-        st.warning(
-            f"{subject}: Attend {sub_need} classes"
-        )
-
-    else:
-
-        st.success(
-            f"{subject}: Can leave {sub_leave} classes"
-        )
 
     # ---------------- PDF ----------------
     pdf = generate_pdf(
