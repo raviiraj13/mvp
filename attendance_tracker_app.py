@@ -10,7 +10,7 @@ import re
 st.set_page_config(page_title="Attendance Tracker", layout="wide")
 
 st.title("📊 Attendance Tracker")
-st.caption("Full Optimizer with Leave Simulator and Recovery Calculator")
+st.caption("Optimized with OD, Makeup, Leave Simulator, and Recovery Calculator")
 
 PRESENT_COLOR = "#1ABC9C"
 ABSENT_COLOR = "#F39C12"
@@ -19,7 +19,7 @@ ABSENT_COLOR = "#F39C12"
 def clean_text(text):
     return text.encode("latin-1", "ignore").decode("latin-1")
 
-# ---------------- PARSE ATTENDANCE ----------------
+# ---------------- PARSER ----------------
 def parse_attendance(text):
 
     rows = []
@@ -78,7 +78,7 @@ def parse_attendance(text):
 
     return df.sort_values("Attendance%")
 
-# ---------------- MATH FUNCTIONS ----------------
+# ---------------- MATH ----------------
 def classes_needed(present, total, target):
 
     x = sp.symbols("x")
@@ -103,19 +103,20 @@ def classes_can_leave(present, total, target):
 
     return max(0, leave-1)
 
-# ---------------- PIE CHART ----------------
-def plot_pie(present, absent):
+# ---------------- AGGREGATE PIE CHART ----------------
+def plot_aggregate_pie(effective_present, total_absent):
 
     plt.figure(figsize=(5,5))
 
     plt.pie(
-        [present, absent],
-        labels=["Effective Present","Absent"],
+        [effective_present, total_absent],
+        labels=["Aggregate Attendance", "Aggregate Absent"],
         autopct="%1.1f%%",
-        colors=[PRESENT_COLOR, ABSENT_COLOR]
+        colors=[PRESENT_COLOR, ABSENT_COLOR],
+        startangle=90
     )
 
-    plt.title("Aggregate Attendance")
+    plt.title("Aggregate Attendance vs Absent")
 
     st.pyplot(plt)
     plt.close()
@@ -131,7 +132,11 @@ def generate_pdf(attendance, df):
 
     pdf.set_font("Arial","",12)
 
-    pdf.cell(0,10,f"Aggregate Attendance: {attendance:.2f}%", ln=True)
+    pdf.cell(
+        0,10,
+        f"Aggregate Attendance: {attendance:.2f}%",
+        ln=True
+    )
 
     pdf.ln(5)
 
@@ -200,7 +205,8 @@ if text:
         f"{aggregate_attendance:.2f}%"
     )
 
-    plot_pie(
+    # UPDATED PIE CHART
+    plot_aggregate_pie(
         effective_present,
         total_absent
     )
@@ -225,8 +231,15 @@ if text:
         target
     )
 
-    st.info(f"Attend {need} classes to reach target")
-    st.info(f"You can leave {leave_safe} classes safely")
+    # SINGLE LINE OUTPUT
+    if aggregate_attendance < target:
+        st.warning(
+            f"Attend {need} classes to reach {target}% attendance"
+        )
+    else:
+        st.success(
+            f"You can leave {leave_safe} classes safely"
+        )
 
     # ---------------- LEAVE + RECOVERY SIMULATOR ----------------
     st.subheader("🎚️ Leave Simulator + Recovery Calculator")
@@ -271,11 +284,6 @@ if text:
         f"{final_attendance:.2f}%"
     )
 
-    if new_attendance >= target:
-        st.success("Still above target")
-    else:
-        st.warning("Below target after leaving")
-
     # ---------------- SUBJECT OPTIMIZER ----------------
     st.subheader("🎯 Subject-wise Target Optimizer")
 
@@ -298,9 +306,14 @@ if text:
         target
     )
 
-    st.info(f"{subject}")
-    st.info(f"Attend {sub_need} classes")
-    st.info(f"Can leave {sub_leave} classes safely")
+    if row["Attendance%"] < target:
+        st.warning(
+            f"{subject}: Attend {sub_need} classes"
+        )
+    else:
+        st.success(
+            f"{subject}: Can leave {sub_leave} classes"
+        )
 
     # ---------------- PDF ----------------
     pdf = generate_pdf(
