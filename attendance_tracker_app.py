@@ -20,6 +20,7 @@ ABSENT_COLOR = "#F39C12"
 def clean_text(text):
     return text.encode("latin-1", "ignore").decode("latin-1")
 
+
 # ---------------- PARSER ----------------
 def parse_attendance(text):
 
@@ -57,14 +58,14 @@ def parse_attendance(text):
         "Absent"
     ])
 
+    # IMPORTANT FORMULA: Present = Present + Makeup
     df["Effective Present"] = (
         df["Present"] +
-        df["OD"] +
         df["Makeup"]
     )
 
     df["Total Classes"] = (
-        df["Present"] +
+        df["Effective Present"] +
         df["Absent"]
     )
 
@@ -79,35 +80,72 @@ def parse_attendance(text):
 
     return df.sort_values("Attendance%")
 
-# ---------------- PIE CHART ----------------
-def plot_attendance_percentage_pie(aggregate_present, total_present, total_absent):
 
-    total_classes = total_present + total_absent
+# ---------------- OVERALL DONUT ----------------
+def plot_all_subjects_donut(aggregate_present, total_absent):
 
-    attendance_percent = (
-        aggregate_present / total_classes * 100
-    )
+    st.subheader("📊 Overall Attendance Donut Chart")
 
+    total = aggregate_present + total_absent
+
+    attendance_percent = aggregate_present / total * 100
     remaining_percent = 100 - attendance_percent
 
-    plt.figure(figsize=(6,6))
+    fig, ax = plt.subplots(figsize=(6,6))
 
-    plt.pie(
+    ax.pie(
         [attendance_percent, remaining_percent],
-        labels=[
-            f"Attendance {attendance_percent:.2f}%",
-            f"Remaining {remaining_percent:.2f}%"
-        ],
+        labels=["Present", "Absent"],
         autopct="%1.1f%%",
         colors=[PRESENT_COLOR, ABSENT_COLOR],
-        startangle=90
+        startangle=90,
+        wedgeprops=dict(width=0.4)
     )
 
-    plt.title("Aggregate Attendance Percentage")
+    ax.set_title("Overall Attendance")
 
-    st.pyplot(plt)
+    st.pyplot(fig)
 
-    plt.close()
+    plt.close(fig)
+
+
+# ---------------- SUBJECT DONUT ----------------
+def plot_subject_donut(df):
+
+    st.subheader("📘 Subject-wise Attendance Donut Charts")
+
+    cols = st.columns(3)
+
+    for i, (_, row) in enumerate(df.iterrows()):
+
+        present = row["Effective Present"]
+        absent = row["Absent"]
+
+        total = present + absent
+
+        if total == 0:
+            continue
+
+        attendance_percent = present / total * 100
+        remaining_percent = 100 - attendance_percent
+
+        fig, ax = plt.subplots(figsize=(4,4))
+
+        ax.pie(
+            [attendance_percent, remaining_percent],
+            labels=["Present", "Absent"],
+            autopct="%1.1f%%",
+            colors=[PRESENT_COLOR, ABSENT_COLOR],
+            startangle=90,
+            wedgeprops=dict(width=0.4)
+        )
+
+        ax.set_title(row["Subject"])
+
+        cols[i % 3].pyplot(fig)
+
+        plt.close(fig)
+
 
 # ---------------- MATH ----------------
 def classes_needed(present, total, target):
@@ -134,6 +172,7 @@ def classes_can_leave(present, total, target):
 
     return max(0, leave-1)
 
+
 # ---------------- PDF ----------------
 def generate_pdf(attendance, df):
 
@@ -143,11 +182,7 @@ def generate_pdf(attendance, df):
 
     pdf.set_font("Arial","B",16)
 
-    pdf.cell(
-        0,10,
-        "Attendance Report",
-        ln=True
-    )
+    pdf.cell(0,10,"Attendance Report", ln=True)
 
     pdf.set_font("Arial","",12)
 
@@ -171,6 +206,7 @@ def generate_pdf(attendance, df):
 
     return pdf.output(dest="S").encode("latin-1")
 
+
 # ---------------- INPUT ----------------
 text = st.text_area(
     "Paste Attendance Report",
@@ -181,58 +217,46 @@ if text:
 
     df = parse_attendance(text)
 
-    st.success("Attendance uploaded successfully🥳")
+    st.success("Attendance uploaded successfully 🥳")
 
-    st.subheader("Subject-wise Attendance")
+    st.subheader("Subject-wise Attendance Table")
 
     st.dataframe(df)
 
+
     # ---------------- SUMMARY ----------------
-    total_present = df["Present"].sum()
-    total_od = df["OD"].sum()
-    total_makeup = df["Makeup"].sum()
+    total_present = df["Effective Present"].sum()
     total_absent = df["Absent"].sum()
 
-    aggregate_present = (
-        total_present +
-        total_od +
-        total_makeup
-    )
-
-    total_classes = (
-        total_present +
-        total_absent
-    )
+    total_classes = total_present + total_absent
 
     aggregate_attendance = (
-        aggregate_present /
+        total_present /
         total_classes * 100
     )
 
     st.subheader("Overall Summary")
 
     c1,c2,c3 = st.columns(3)
-    c4,c5,c6 = st.columns(3)
 
-    c1.metric("Present", total_present)
+    c1.metric("Effective Present", total_present)
     c2.metric("Absent", total_absent)
     c3.metric("Total Classes", total_classes)
-
-    c4.metric("OD", total_od)
-    c5.metric("Makeup", total_makeup)
-    c6.metric("Aggregate Present", aggregate_present)
 
     st.metric(
         "Aggregate Attendance %",
         f"{aggregate_attendance:.2f}%"
     )
 
-    # ---------------- PIE CHART ----------------
-    plot_attendance_percentage_pie(
-        aggregate_present,
+
+    # ---------------- DONUT CHARTS ----------------
+    plot_all_subjects_donut(
         total_present,
         total_absent
     )
+
+    plot_subject_donut(df)
+
 
     # ---------------- TARGET OPTIMIZER ----------------
     st.subheader("🎯 Aggregate Target Optimizer")
@@ -246,13 +270,13 @@ if text:
     )
 
     need = classes_needed(
-        aggregate_present,
+        total_present,
         total_classes,
         target
     )
 
     leave_safe = classes_can_leave(
-        aggregate_present,
+        total_present,
         total_classes,
         target
     )
@@ -260,30 +284,30 @@ if text:
     if aggregate_attendance < target:
 
         st.warning(
-            f"🥴Attend {need} classes to reach {target}% attendance"
+            f"Attend {need} classes to reach {target}%"
         )
 
     else:
 
         st.success(
-            f"🥳You can leave {leave_safe} classes safely"
+            f"You can leave {leave_safe} classes safely"
         )
 
+
     # ---------------- LEAVE SIMULATOR ----------------
-    st.subheader("🎚️ Leave Simulator + Recovery")
+    st.subheader("🎚️ Leave Simulator")
 
     leave_x = st.number_input(
-        "Enter number of classes to leave",
+        "Enter classes to leave",
         min_value=0,
         max_value=total_classes + 500,
-        value=0,
-        step=1
+        value=0
     )
 
     new_total = total_classes + leave_x
 
     new_attendance = (
-        aggregate_present /
+        total_present /
         new_total * 100
     )
 
@@ -292,16 +316,6 @@ if text:
         f"{new_attendance:.2f}%"
     )
 
-    required_after_leave = classes_needed(
-        aggregate_present,
-        new_total,
-        target
-    )
-
-    st.metric(
-        "Classes required to recover target",
-        required_after_leave
-    )
 
     # ---------------- SUBJECT TARGET ----------------
     st.subheader("🎯 Subject-wise Target Optimizer")
@@ -336,6 +350,7 @@ if text:
         st.success(
             f"{subject}: Can leave {sub_leave} classes"
         )
+
 
     # ---------------- PDF ----------------
     pdf = generate_pdf(
