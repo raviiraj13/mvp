@@ -10,7 +10,7 @@ import re
 st.set_page_config(page_title="Attendance Tracker", layout="wide")
 
 st.title("📊 Attendance Tracker")
-st.caption("Aggregate and Subject Target Optimized with OD & Makeup")
+st.caption("Optimized with OD, Makeup, Target Optimizer and Leave Simulator")
 
 PRESENT_COLOR = "#1ABC9C"
 ABSENT_COLOR = "#F39C12"
@@ -56,7 +56,6 @@ def parse_attendance(text):
         "Absent"
     ])
 
-    # IMPORTANT FORMULA
     df["Effective Present"] = (
         df["Present"] +
         df["OD"] +
@@ -99,12 +98,12 @@ def classes_can_leave(present, total, target):
 
     leave = 0
 
-    while (present)/(total+leave)*100 >= target:
+    while present/(total+leave)*100 >= target:
         leave += 1
 
     return max(0, leave-1)
 
-# ---------------- PIE ----------------
+# ---------------- PIE CHART ----------------
 def plot_pie(present, absent):
 
     plt.figure(figsize=(5,5))
@@ -116,11 +115,13 @@ def plot_pie(present, absent):
         colors=[PRESENT_COLOR, ABSENT_COLOR]
     )
 
+    plt.title("Aggregate Attendance")
+
     st.pyplot(plt)
     plt.close()
 
 # ---------------- PDF ----------------
-def generate_pdf(summary, df):
+def generate_pdf(attendance, df):
 
     pdf = FPDF()
     pdf.add_page()
@@ -130,7 +131,7 @@ def generate_pdf(summary, df):
 
     pdf.set_font("Arial","",12)
 
-    pdf.cell(0,8,f"Aggregate Attendance: {summary:.2f}%", ln=True)
+    pdf.cell(0,10,f"Aggregate Attendance: {attendance:.2f}%", ln=True)
 
     pdf.ln(5)
 
@@ -159,7 +160,7 @@ if text:
 
     st.dataframe(df)
 
-    # ---------------- AGGREGATE SUMMARY ----------------
+    # ---------------- SUMMARY ----------------
     total_present = df["Present"].sum()
     total_od = df["OD"].sum()
     total_makeup = df["Makeup"].sum()
@@ -218,14 +219,43 @@ if text:
         target
     )
 
-    leave = classes_can_leave(
+    leave_safe = classes_can_leave(
         effective_present,
         total_classes,
         target
     )
 
     st.info(f"Attend {need} classes to reach target")
-    st.info(f"Can leave {leave} classes safely")
+    st.info(f"You can leave {leave_safe} classes safely")
+
+    # ---------------- LEAVE SIMULATOR ----------------
+    st.subheader("🎚️ Leave Class Simulator")
+
+    leave_x = st.slider(
+        "Select number of classes to leave",
+        min_value=0,
+        max_value=total_classes+50,
+        value=0
+    )
+
+    new_total = total_classes + leave_x
+
+    new_attendance = (
+        effective_present /
+        new_total * 100
+    )
+
+    st.metric(
+        "New Attendance %",
+        f"{new_attendance:.2f}%"
+    )
+
+    if new_attendance >= target:
+        st.success("✅ Still above target")
+    else:
+        st.error("❌ Below target")
+
+    st.info(f"Maximum safe leave: {leave_safe}")
 
     # ---------------- SUBJECT TARGET ----------------
     st.subheader("🎯 Subject-wise Target Optimizer")
@@ -251,7 +281,7 @@ if text:
 
     st.info(f"{subject}")
     st.info(f"Attend {sub_need} classes")
-    st.info(f"Can leave {sub_leave} classes")
+    st.info(f"Can leave {sub_leave} classes safely")
 
     # ---------------- PDF ----------------
     pdf = generate_pdf(
