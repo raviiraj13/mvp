@@ -10,9 +10,8 @@ import re
 st.set_page_config(page_title="Attendance Tracker", layout="wide")
 
 st.title("📊 Attendance Tracker")
-st.caption("Optimized with automatic OD and Makeup detection")
+st.caption("Aggregate and Subject Target Optimized with OD & Makeup")
 
-# ---------------- COLORS ----------------
 PRESENT_COLOR = "#1ABC9C"
 ABSENT_COLOR = "#F39C12"
 
@@ -20,7 +19,7 @@ ABSENT_COLOR = "#F39C12"
 def clean_text(text):
     return text.encode("latin-1", "ignore").decode("latin-1")
 
-# ---------------- PARSE DATA ----------------
+# ---------------- PARSER ----------------
 def parse_attendance(text):
 
     rows = []
@@ -49,35 +48,26 @@ def parse_attendance(text):
             absent
         ])
 
-    if not rows:
-        raise ValueError("Invalid format")
-
     df = pd.DataFrame(rows, columns=[
-
         "Subject",
         "Present",
         "OD",
         "Makeup",
         "Absent"
-
     ])
 
-    # Effective present
+    # IMPORTANT FORMULA
     df["Effective Present"] = (
         df["Present"] +
         df["OD"] +
         df["Makeup"]
     )
 
-    # Total classes
     df["Total Classes"] = (
         df["Present"] +
-        df["OD"] +
-        df["Makeup"] +
         df["Absent"]
     )
 
-    # Attendance %
     df["Attendance%"] = (
         df["Effective Present"] /
         df["Total Classes"] * 100
@@ -89,7 +79,7 @@ def parse_attendance(text):
 
     return df.sort_values("Attendance%")
 
-# ---------------- MATH ----------------
+# ---------------- TARGET MATH ----------------
 def classes_needed(present, total, target):
 
     x = sp.symbols("x")
@@ -109,27 +99,22 @@ def classes_can_leave(present, total, target):
 
     leave = 0
 
-    while total+leave > 0 and (
-        present/(total+leave)*100 >= target
-    ):
+    while (present)/(total+leave)*100 >= target:
         leave += 1
 
     return max(0, leave-1)
 
-# ---------------- PIE CHART ----------------
+# ---------------- PIE ----------------
 def plot_pie(present, absent):
 
     plt.figure(figsize=(5,5))
 
     plt.pie(
         [present, absent],
-        labels=["Present","Absent"],
+        labels=["Effective Present","Absent"],
         autopct="%1.1f%%",
-        colors=[PRESENT_COLOR, ABSENT_COLOR],
-        startangle=90
+        colors=[PRESENT_COLOR, ABSENT_COLOR]
     )
-
-    plt.title("Overall Attendance")
 
     st.pyplot(plt)
     plt.close()
@@ -145,12 +130,7 @@ def generate_pdf(summary, df):
 
     pdf.set_font("Arial","",12)
 
-    pdf.cell(0,8,f"Total Classes: {summary['total']}", ln=True)
-    pdf.cell(0,8,f"Present: {summary['present']}", ln=True)
-    pdf.cell(0,8,f"Absent: {summary['absent']}", ln=True)
-    pdf.cell(0,8,f"OD: {summary['od']}", ln=True)
-    pdf.cell(0,8,f"Makeup: {summary['makeup']}", ln=True)
-    pdf.cell(0,8,f"Attendance: {summary['attendance']:.2f}%", ln=True)
+    pdf.cell(0,8,f"Aggregate Attendance: {summary:.2f}%", ln=True)
 
     pdf.ln(5)
 
@@ -171,105 +151,116 @@ text = st.text_area("Paste Attendance Report", height=300)
 
 if text:
 
-    try:
+    df = parse_attendance(text)
 
-        df = parse_attendance(text)
+    st.success("Attendance parsed successfully")
 
-        st.success("Attendance parsed successfully")
+    st.subheader("Subject-wise Attendance")
 
-        st.subheader("Subject-wise Attendance")
+    st.dataframe(df)
 
-        st.dataframe(df)
+    # ---------------- AGGREGATE SUMMARY ----------------
+    total_present = df["Present"].sum()
+    total_od = df["OD"].sum()
+    total_makeup = df["Makeup"].sum()
+    total_absent = df["Absent"].sum()
 
-        # -------- SUMMARY --------
-        total_present = df["Present"].sum()
-        total_od = df["OD"].sum()
-        total_makeup = df["Makeup"].sum()
-        total_absent = df["Absent"].sum()
+    effective_present = (
+        total_present +
+        total_od +
+        total_makeup
+    )
 
-        effective_present = (
-            total_present +
-            total_od +
-            total_makeup
-        )
+    total_classes = (
+        total_present +
+        total_absent
+    )
 
-        total_classes = (
-            effective_present +
-            total_absent
-        )
+    aggregate_attendance = (
+        effective_present /
+        total_classes * 100
+    )
 
-        attendance = (
-            effective_present /
-            total_classes * 100
-        )
+    st.subheader("Overall Summary")
 
-        st.subheader("Overall Summary")
+    c1,c2,c3 = st.columns(3)
+    c4,c5,c6 = st.columns(3)
 
-        c1,c2,c3 = st.columns(3)
-        c4,c5,c6 = st.columns(3)
+    c1.metric("Present", total_present)
+    c2.metric("Absent", total_absent)
+    c3.metric("Total Classes", total_classes)
 
-        c1.metric("Total Present", total_present)
-        c2.metric("Total Absent", total_absent)
-        c3.metric("Total Classes", total_classes)
+    c4.metric("OD", total_od)
+    c5.metric("Makeup", total_makeup)
+    c6.metric("Effective Present", effective_present)
 
-        c4.metric("Total OD", total_od)
-        c5.metric("Total Makeup", total_makeup)
-        c6.metric("Effective Present", effective_present)
+    st.metric(
+        "Aggregate Attendance %",
+        f"{aggregate_attendance:.2f}%"
+    )
 
-        st.metric(
-            "Overall Attendance %",
-            f"{attendance:.2f}%"
-        )
+    plot_pie(
+        effective_present,
+        total_absent
+    )
 
-        plot_pie(
-            effective_present,
-            total_absent
-        )
+    # ---------------- AGGREGATE TARGET ----------------
+    st.subheader("🎯 Aggregate Target Optimizer")
 
-        # -------- TARGET --------
-        st.subheader("Target Optimizer")
+    target = st.number_input(
+        "Aggregate Target %",
+        0,100,75
+    )
 
-        target = st.number_input(
-            "Enter target %",
-            0,100,75
-        )
+    need = classes_needed(
+        effective_present,
+        total_classes,
+        target
+    )
 
-        need = classes_needed(
-            effective_present,
-            total_classes,
-            target
-        )
+    leave = classes_can_leave(
+        effective_present,
+        total_classes,
+        target
+    )
 
-        leave = classes_can_leave(
-            effective_present,
-            total_classes,
-            target
-        )
+    st.info(f"Attend {need} classes to reach target")
+    st.info(f"Can leave {leave} classes safely")
 
-        st.info(f"Attend {need} more classes")
-        st.info(f"Can leave {leave} classes safely")
+    # ---------------- SUBJECT TARGET ----------------
+    st.subheader("🎯 Subject-wise Target Optimizer")
 
-        # -------- PDF --------
-        summary = {
+    subject = st.selectbox(
+        "Select Subject",
+        df["Subject"]
+    )
 
-            "present": total_present,
-            "absent": total_absent,
-            "od": total_od,
-            "makeup": total_makeup,
-            "total": total_classes,
-            "attendance": attendance
+    row = df[df["Subject"] == subject].iloc[0]
 
-        }
+    sub_need = classes_needed(
+        row["Effective Present"],
+        row["Total Classes"],
+        target
+    )
 
-        pdf = generate_pdf(summary, df)
+    sub_leave = classes_can_leave(
+        row["Effective Present"],
+        row["Total Classes"],
+        target
+    )
 
-        st.download_button(
-            "Download PDF",
-            pdf,
-            "attendance_report.pdf"
-        )
+    st.info(f"{subject}")
+    st.info(f"Attend {sub_need} classes")
+    st.info(f"Can leave {sub_leave} classes")
 
-    except Exception as e:
+    # ---------------- PDF ----------------
+    pdf = generate_pdf(
+        aggregate_attendance,
+        df
+    )
 
-        st.error("Parsing failed")
-        st.code(str(e))
+    st.download_button(
+        "Download PDF",
+        pdf,
+        "attendance_report.pdf"
+    )
