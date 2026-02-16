@@ -10,7 +10,7 @@ import re
 st.set_page_config(page_title="Attendance Tracker", layout="wide")
 
 st.title("📊 Attendance Tracker")
-st.caption("Optimized with OD, Makeup, Target Optimizer and Leave Simulator")
+st.caption("Full Optimizer with Leave Simulator and Recovery Calculator")
 
 PRESENT_COLOR = "#1ABC9C"
 ABSENT_COLOR = "#F39C12"
@@ -19,7 +19,7 @@ ABSENT_COLOR = "#F39C12"
 def clean_text(text):
     return text.encode("latin-1", "ignore").decode("latin-1")
 
-# ---------------- PARSER ----------------
+# ---------------- PARSE ATTENDANCE ----------------
 def parse_attendance(text):
 
     rows = []
@@ -78,7 +78,7 @@ def parse_attendance(text):
 
     return df.sort_values("Attendance%")
 
-# ---------------- TARGET MATH ----------------
+# ---------------- MATH FUNCTIONS ----------------
 def classes_needed(present, total, target):
 
     x = sp.symbols("x")
@@ -205,11 +205,11 @@ if text:
         total_absent
     )
 
-    # ---------------- AGGREGATE TARGET ----------------
+    # ---------------- TARGET OPTIMIZER ----------------
     st.subheader("🎯 Aggregate Target Optimizer")
 
     target = st.number_input(
-        "Aggregate Target %",
+        "Enter Target %",
         0,100,75
     )
 
@@ -228,14 +228,14 @@ if text:
     st.info(f"Attend {need} classes to reach target")
     st.info(f"You can leave {leave_safe} classes safely")
 
-    # ---------------- LEAVE SIMULATOR ----------------
-    st.subheader("🎚️ Leave Class Simulator")
+    # ---------------- LEAVE + RECOVERY SIMULATOR ----------------
+    st.subheader("🎚️ Leave Simulator + Recovery Calculator")
 
     leave_x = st.slider(
         "Select number of classes to leave",
-        min_value=0,
-        max_value=total_classes+50,
-        value=0
+        0,
+        total_classes + 50,
+        0
     )
 
     new_total = total_classes + leave_x
@@ -246,18 +246,37 @@ if text:
     )
 
     st.metric(
-        "New Attendance %",
+        "Attendance after leaving",
         f"{new_attendance:.2f}%"
     )
 
+    required_after_leave = classes_needed(
+        effective_present,
+        new_total,
+        target
+    )
+
+    st.metric(
+        "Classes required to recover target",
+        required_after_leave
+    )
+
+    final_attendance = (
+        (effective_present + required_after_leave) /
+        (new_total + required_after_leave) * 100
+    )
+
+    st.metric(
+        "Attendance after recovery",
+        f"{final_attendance:.2f}%"
+    )
+
     if new_attendance >= target:
-        st.success("✅ Still above target")
+        st.success("Still above target")
     else:
-        st.error("❌ Below target")
+        st.warning("Below target after leaving")
 
-    st.info(f"Maximum safe leave: {leave_safe}")
-
-    # ---------------- SUBJECT TARGET ----------------
+    # ---------------- SUBJECT OPTIMIZER ----------------
     st.subheader("🎯 Subject-wise Target Optimizer")
 
     subject = st.selectbox(
