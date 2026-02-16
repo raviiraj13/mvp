@@ -10,11 +10,12 @@ import re
 st.set_page_config(page_title="Attendance Tracker", layout="wide")
 
 st.title("📊 Attendance Tracker")
-st.caption("Paste the Attendance from college ERP")
+st.caption("Paste attendance from college ERP")
 
 # ---------------- COLORS ----------------
 PRESENT_COLOR = "#1ABC9C"
 ABSENT_COLOR = "#F39C12"
+
 
 # ---------------- CLEAN PDF ----------------
 def clean_text(text):
@@ -58,16 +59,10 @@ def parse_attendance(text):
         "Absent"
     ])
 
-    # IMPORTANT FORMULA: Present = Present + Makeup
-    df["Effective Present"] = (
-        df["Present"] +
-        df["Makeup"]
-    )
+    # IMPORTANT RULE: Present = Present + Makeup
+    df["Effective Present"] = df["Present"] + df["Makeup"]
 
-    df["Total Classes"] = (
-        df["Effective Present"] +
-        df["Absent"]
-    )
+    df["Total Classes"] = df["Effective Present"] + df["Absent"]
 
     df["Attendance%"] = (
         df["Effective Present"] /
@@ -82,24 +77,28 @@ def parse_attendance(text):
 
 
 # ---------------- OVERALL DONUT ----------------
-def plot_all_subjects_donut(aggregate_present, total_absent):
+def plot_overall_donut(total_present, total_absent):
 
     st.subheader("📊 Overall Attendance Donut Chart")
 
-    total = aggregate_present + total_absent
+    total = total_present + total_absent
 
-    attendance_percent = aggregate_present / total * 100
-    remaining_percent = 100 - attendance_percent
+    if total == 0:
+        st.warning("No data")
+        return
 
-    fig, ax = plt.subplots(figsize=(6,6))
+    present_percent = total_present / total * 100
+    absent_percent = 100 - present_percent
+
+    fig, ax = plt.subplots()
 
     ax.pie(
-        [attendance_percent, remaining_percent],
+        [present_percent, absent_percent],
         labels=["Present", "Absent"],
-        autopct="%1.1f%%",
         colors=[PRESENT_COLOR, ABSENT_COLOR],
+        autopct="%1.1f%%",
         startangle=90,
-        wedgeprops=dict(width=0.4)
+        wedgeprops={"width":0.4}
     )
 
     ax.set_title("Overall Attendance")
@@ -110,13 +109,15 @@ def plot_all_subjects_donut(aggregate_present, total_absent):
 
 
 # ---------------- SUBJECT DONUT ----------------
-def plot_subject_donut(df):
+def plot_subjectwise_donut(df):
 
     st.subheader("📘 Subject-wise Attendance Donut Charts")
 
     cols = st.columns(3)
 
-    for i, (_, row) in enumerate(df.iterrows()):
+    for i in range(len(df)):
+
+        row = df.iloc[i]
 
         present = row["Effective Present"]
         absent = row["Absent"]
@@ -126,18 +127,18 @@ def plot_subject_donut(df):
         if total == 0:
             continue
 
-        attendance_percent = present / total * 100
-        remaining_percent = 100 - attendance_percent
+        present_percent = present / total * 100
+        absent_percent = 100 - present_percent
 
-        fig, ax = plt.subplots(figsize=(4,4))
+        fig, ax = plt.subplots()
 
         ax.pie(
-            [attendance_percent, remaining_percent],
+            [present_percent, absent_percent],
             labels=["Present", "Absent"],
-            autopct="%1.1f%%",
             colors=[PRESENT_COLOR, ABSENT_COLOR],
+            autopct="%1.1f%%",
             startangle=90,
-            wedgeprops=dict(width=0.4)
+            wedgeprops={"width":0.4}
         )
 
         ax.set_title(row["Subject"])
@@ -181,11 +182,9 @@ def generate_pdf(attendance, df):
     pdf.add_page()
 
     pdf.set_font("Arial","B",16)
-
     pdf.cell(0,10,"Attendance Report", ln=True)
 
     pdf.set_font("Arial","",12)
-
     pdf.cell(
         0,10,
         f"Aggregate Attendance: {attendance:.2f}%",
@@ -219,29 +218,29 @@ if text:
 
     st.success("Attendance uploaded successfully 🥳")
 
-    st.subheader("Subject-wise Attendance Table")
+    st.subheader("📋 Attendance Table")
 
     st.dataframe(df)
 
 
     # ---------------- SUMMARY ----------------
-    total_present = df["Effective Present"].sum()
+    total_effective_present = df["Effective Present"].sum()
     total_absent = df["Absent"].sum()
 
-    total_classes = total_present + total_absent
+    total_classes = total_effective_present + total_absent
 
     aggregate_attendance = (
-        total_present /
+        total_effective_present /
         total_classes * 100
     )
 
-    st.subheader("Overall Summary")
+    st.subheader("📈 Overall Summary")
 
-    c1,c2,c3 = st.columns(3)
+    col1, col2, col3 = st.columns(3)
 
-    c1.metric("Effective Present", total_present)
-    c2.metric("Absent", total_absent)
-    c3.metric("Total Classes", total_classes)
+    col1.metric("Effective Present", total_effective_present)
+    col2.metric("Absent", total_absent)
+    col3.metric("Total Classes", total_classes)
 
     st.metric(
         "Aggregate Attendance %",
@@ -250,33 +249,32 @@ if text:
 
 
     # ---------------- DONUT CHARTS ----------------
-    plot_all_subjects_donut(
-        total_present,
+    plot_overall_donut(
+        total_effective_present,
         total_absent
     )
 
-    plot_subject_donut(df)
+    plot_subjectwise_donut(df)
 
 
     # ---------------- TARGET OPTIMIZER ----------------
-    st.subheader("🎯 Aggregate Target Optimizer")
+    st.subheader("🎯 Target Optimizer")
 
     target = st.number_input(
         "Enter Target %",
         min_value=0,
         max_value=100,
-        value=75,
-        step=1
+        value=75
     )
 
     need = classes_needed(
-        total_present,
+        total_effective_present,
         total_classes,
         target
     )
 
     leave_safe = classes_can_leave(
-        total_present,
+        total_effective_present,
         total_classes,
         target
     )
@@ -298,27 +296,27 @@ if text:
     st.subheader("🎚️ Leave Simulator")
 
     leave_x = st.number_input(
-        "Enter classes to leave",
+        "Classes to leave",
         min_value=0,
-        max_value=total_classes + 500,
+        max_value=500,
         value=0
     )
 
     new_total = total_classes + leave_x
 
     new_attendance = (
-        total_present /
+        total_effective_present /
         new_total * 100
     )
 
     st.metric(
-        "Attendance after leaving",
+        "New Attendance %",
         f"{new_attendance:.2f}%"
     )
 
 
     # ---------------- SUBJECT TARGET ----------------
-    st.subheader("🎯 Subject-wise Target Optimizer")
+    st.subheader("📘 Subject Target Optimizer")
 
     subject = st.selectbox(
         "Select Subject",
@@ -359,7 +357,7 @@ if text:
     )
 
     st.download_button(
-        "Download PDF",
+        "Download PDF Report",
         pdf,
         "attendance_report.pdf"
     )
