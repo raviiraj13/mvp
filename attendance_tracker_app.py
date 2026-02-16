@@ -10,7 +10,7 @@ import re
 st.set_page_config(page_title="Attendance Tracker", layout="wide")
 
 st.title("📊 Attendance Tracker")
-st.caption("Pie chart shows Aggregate Attendance Percentage")
+st.caption("Bar chart shows Aggregate Attendance Percentage")
 
 # ---------------- COLORS ----------------
 PRESENT_COLOR = "#1ABC9C"
@@ -79,29 +79,47 @@ def parse_attendance(text):
 
     return df.sort_values("Attendance%")
 
-# ---------------- PIE CHART (PERCENTAGE) ----------------
-def plot_attendance_percentage_pie(aggregate_present, total_present, total_absent):
-
-    total_classes = total_present + total_absent
-
-    attendance_percent = (
-        aggregate_present / total_classes * 100
-    )
+# ---------------- BAR CHART ----------------
+def plot_attendance_percentage_bar(attendance_percent):
 
     remaining_percent = 100 - attendance_percent
 
-    plt.figure(figsize=(6,6))
+    labels = [
+        "Attendance %",
+        "Remaining %"
+    ]
 
-    plt.pie(
-        [attendance_percent, remaining_percent],
-        labels=[
-            f"Attendance {attendance_percent:.2f}%",
-            f"Remaining {remaining_percent:.2f}%"
-        ],
-        autopct="%1.1f%%",
-        colors=[PRESENT_COLOR, ABSENT_COLOR],
-        startangle=90
+    values = [
+        attendance_percent,
+        remaining_percent
+    ]
+
+    plt.figure(figsize=(6,4))
+
+    bars = plt.bar(
+        labels,
+        values,
+        color=[PRESENT_COLOR, ABSENT_COLOR]
     )
+
+    # show % values on bars
+    for bar in bars:
+
+        height = bar.get_height()
+
+        plt.text(
+            bar.get_x() + bar.get_width()/2,
+            height,
+            f"{height:.2f}%",
+            ha="center",
+            va="bottom",
+            fontweight="bold",
+            fontsize=12
+        )
+
+    plt.ylim(0,100)
+
+    plt.ylabel("Percentage")
 
     plt.title("Aggregate Attendance Percentage")
 
@@ -227,11 +245,9 @@ if text:
         f"{aggregate_attendance:.2f}%"
     )
 
-    # PIE CHART SHOWING PERCENTAGE
-    plot_attendance_percentage_pie(
-        aggregate_present,
-        total_present,
-        total_absent
+    # BAR CHART SHOWING PERCENTAGE
+    plot_attendance_percentage_bar(
+        aggregate_attendance
     )
 
     # ---------------- TARGET OPTIMIZER ----------------
