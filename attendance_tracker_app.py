@@ -10,7 +10,7 @@ import re
 st.set_page_config(page_title="Attendance Tracker", layout="wide")
 
 st.title("📊 Attendance Tracker")
-st.caption("Bar chart shows Aggregate Attendance Percentage")
+st.caption("Pie chart shows Aggregate Attendance Percentage")
 
 # ---------------- COLORS ----------------
 PRESENT_COLOR = "#1ABC9C"
@@ -79,47 +79,29 @@ def parse_attendance(text):
 
     return df.sort_values("Attendance%")
 
-# ---------------- BAR CHART ----------------
-def plot_attendance_percentage_bar(attendance_percent):
+# ---------------- PIE CHART ----------------
+def plot_attendance_percentage_pie(aggregate_present, total_present, total_absent):
+
+    total_classes = total_present + total_absent
+
+    attendance_percent = (
+        aggregate_present / total_classes * 100
+    )
 
     remaining_percent = 100 - attendance_percent
 
-    labels = [
-        "Attendance %",
-        "Remaining %"
-    ]
+    plt.figure(figsize=(6,6))
 
-    values = [
-        attendance_percent,
-        remaining_percent
-    ]
-
-    plt.figure(figsize=(6,4))
-
-    bars = plt.bar(
-        labels,
-        values,
-        color=[PRESENT_COLOR, ABSENT_COLOR]
+    plt.pie(
+        [attendance_percent, remaining_percent],
+        labels=[
+            f"Attendance {attendance_percent:.2f}%",
+            f"Remaining {remaining_percent:.2f}%"
+        ],
+        autopct="%1.1f%%",
+        colors=[PRESENT_COLOR, ABSENT_COLOR],
+        startangle=90
     )
-
-    # show % values on bars
-    for bar in bars:
-
-        height = bar.get_height()
-
-        plt.text(
-            bar.get_x() + bar.get_width()/2,
-            height,
-            f"{height:.2f}%",
-            ha="center",
-            va="bottom",
-            fontweight="bold",
-            fontsize=12
-        )
-
-    plt.ylim(0,100)
-
-    plt.ylabel("Percentage")
 
     plt.title("Aggregate Attendance Percentage")
 
@@ -245,9 +227,11 @@ if text:
         f"{aggregate_attendance:.2f}%"
     )
 
-    # BAR CHART SHOWING PERCENTAGE
-    plot_attendance_percentage_bar(
-        aggregate_attendance
+    # ---------------- PIE CHART ----------------
+    plot_attendance_percentage_pie(
+        aggregate_present,
+        total_present,
+        total_absent
     )
 
     # ---------------- TARGET OPTIMIZER ----------------
@@ -255,7 +239,10 @@ if text:
 
     target = st.number_input(
         "Enter Target %",
-        0,100,75
+        min_value=0,
+        max_value=100,
+        value=75,
+        step=1
     )
 
     need = classes_needed(
@@ -285,11 +272,12 @@ if text:
     # ---------------- LEAVE SIMULATOR ----------------
     st.subheader("🎚️ Leave Simulator + Recovery")
 
-    leave_x = st.slider(
-        "Select number of classes to leave",
-        0,
-        total_classes + 50,
-        0
+    leave_x = st.number_input(
+        "Enter number of classes to leave",
+        min_value=0,
+        max_value=total_classes + 500,
+        value=0,
+        step=1
     )
 
     new_total = total_classes + leave_x
