@@ -10,7 +10,7 @@ import re
 st.set_page_config(page_title="Attendance Tracker", layout="wide")
 
 st.title("📊 Attendance Tracker")
-st.caption("Pie chart shows Aggregate Attendance Percentage")
+st.caption("Paste the Attendance from college ERP")
 
 # ---------------- COLORS ----------------
 PRESENT_COLOR = "#1ABC9C"
@@ -181,7 +181,7 @@ if text:
 
     df = parse_attendance(text)
 
-    st.success("Attendance parsed successfully")
+    st.success("Attendance uploaded successfully🥳")
 
     st.subheader("Subject-wise Attendance")
 
@@ -260,13 +260,13 @@ if text:
     if aggregate_attendance < target:
 
         st.warning(
-            f"Attend {need} classes to reach {target}% attendance"
+            f"🥴Attend {need} classes to reach {target}% attendance"
         )
 
     else:
 
         st.success(
-            f"You can leave {leave_safe} classes safely"
+            f"🥳You can leave {leave_safe} classes safely"
         )
 
     # ---------------- LEAVE SIMULATOR ----------------
