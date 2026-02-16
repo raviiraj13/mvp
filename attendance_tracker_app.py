@@ -10,7 +10,7 @@ import re
 st.set_page_config(page_title="Attendance Tracker", layout="wide")
 
 st.title("📊 Attendance Tracker")
-st.caption("Aggregate Attendance uses Present + OD + Makeup")
+st.caption("Pie chart shows Aggregate Attendance Percentage")
 
 # ---------------- COLORS ----------------
 PRESENT_COLOR = "#1ABC9C"
@@ -79,6 +79,36 @@ def parse_attendance(text):
 
     return df.sort_values("Attendance%")
 
+# ---------------- PIE CHART (PERCENTAGE) ----------------
+def plot_attendance_percentage_pie(aggregate_present, total_present, total_absent):
+
+    total_classes = total_present + total_absent
+
+    attendance_percent = (
+        aggregate_present / total_classes * 100
+    )
+
+    remaining_percent = 100 - attendance_percent
+
+    plt.figure(figsize=(6,6))
+
+    plt.pie(
+        [attendance_percent, remaining_percent],
+        labels=[
+            f"Attendance {attendance_percent:.2f}%",
+            f"Remaining {remaining_percent:.2f}%"
+        ],
+        autopct="%1.1f%%",
+        colors=[PRESENT_COLOR, ABSENT_COLOR],
+        startangle=90
+    )
+
+    plt.title("Aggregate Attendance Percentage")
+
+    st.pyplot(plt)
+
+    plt.close()
+
 # ---------------- MATH ----------------
 def classes_needed(present, total, target):
 
@@ -103,36 +133,6 @@ def classes_can_leave(present, total, target):
         leave += 1
 
     return max(0, leave-1)
-
-# ---------------- CORRECT PIE CHART ----------------
-def plot_aggregate_pie(total_present, total_od, total_makeup, total_absent):
-
-    aggregate_present = (
-        total_present +
-        total_od +
-        total_makeup
-    )
-
-    aggregate_absent = total_absent
-
-    plt.figure(figsize=(6,6))
-
-    plt.pie(
-        [aggregate_present, aggregate_absent],
-        labels=[
-            f"Attendance (Present + OD + Makeup)\n{aggregate_present}",
-            f"Absent\n{aggregate_absent}"
-        ],
-        autopct="%1.1f%%",
-        colors=[PRESENT_COLOR, ABSENT_COLOR],
-        startangle=90
-    )
-
-    plt.title("Aggregate Attendance")
-
-    st.pyplot(plt)
-
-    plt.close()
 
 # ---------------- PDF ----------------
 def generate_pdf(attendance, df):
@@ -227,11 +227,10 @@ if text:
         f"{aggregate_attendance:.2f}%"
     )
 
-    # CORRECT PIE CHART CALL
-    plot_aggregate_pie(
+    # PIE CHART SHOWING PERCENTAGE
+    plot_attendance_percentage_pie(
+        aggregate_present,
         total_present,
-        total_od,
-        total_makeup,
         total_absent
     )
 
