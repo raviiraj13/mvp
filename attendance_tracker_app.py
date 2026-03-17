@@ -58,19 +58,17 @@ def parse_attendance(text):
         "Absent"
     ])
 
-    # ✅ Effective Present
+    # ✅ Effective Present (OD + Makeup included)
     df["Effective Present"] = (
         df["Present"] +
         df["OD"] +
         df["Makeup"]
     )
 
-    # ✅ FIXED Total Classes
+    # ✅ CORRECT Total Classes (ERP logic)
     df["Total Classes"] = (
         df["Present"] +
-        df["Absent"] +
-        df["OD"] +
-        df["Makeup"]
+        df["Absent"]
     )
 
     # ✅ Attendance %
@@ -94,10 +92,7 @@ def plot_attendance_percentage_pie(present, absent):
         st.warning("No attendance data available")
         return
 
-    attendance_percent = (
-        present / total_classes * 100
-    )
-
+    attendance_percent = (present / total_classes * 100)
     remaining_percent = 100 - attendance_percent
 
     plt.figure(figsize=(6,6))
@@ -138,7 +133,7 @@ def classes_can_leave(present, total, target):
 
     leave = 0
 
-    while present/(total+leave)*100 >= target:
+    while total + leave > 0 and present/(total+leave)*100 >= target:
         leave += 1
 
     return max(0, leave-1)
@@ -187,18 +182,17 @@ if text:
     total_makeup = df["Makeup"].sum()
     total_absent = df["Absent"].sum()
 
+    # ✅ Aggregate Present
     aggregate_present = (
         total_present +
         total_od +
         total_makeup
     )
 
-    # ✅ FIXED TOTAL CLASSES
+    # ✅ CORRECT Total Classes
     total_classes = (
         total_present +
-        total_absent +
-        total_od +
-        total_makeup
+        total_absent
     )
 
     aggregate_attendance = (
