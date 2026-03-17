@@ -10,7 +10,7 @@ import re
 st.set_page_config(page_title="Attendance Tracker", layout="wide")
 
 st.title("📊 Attendance Tracker")
-st.caption("Chill bro, Pravah🎊 hai… jayada Attendance mat dekh😎")
+st.caption("8th April 🗓️ say midterm hai Acha say class attend karo warna Debarr ho jaoge 🧮")
 st.caption("Paste the Attendance from college ERP")
 
 # ---------------- COLORS ----------------
@@ -58,17 +58,22 @@ def parse_attendance(text):
         "Absent"
     ])
 
+    # ✅ Effective Present
     df["Effective Present"] = (
         df["Present"] +
         df["OD"] +
         df["Makeup"]
     )
 
+    # ✅ FIXED Total Classes
     df["Total Classes"] = (
         df["Present"] +
-        df["Absent"]
+        df["Absent"] +
+        df["OD"] +
+        df["Makeup"]
     )
 
+    # ✅ Attendance %
     df["Attendance%"] = (
         df["Effective Present"] /
         df["Total Classes"] * 100
@@ -81,12 +86,16 @@ def parse_attendance(text):
     return df.sort_values("Attendance%")
 
 # ---------------- PIE CHART ----------------
-def plot_attendance_percentage_pie(aggregate_present, total_present, total_absent):
+def plot_attendance_percentage_pie(present, absent):
 
-    total_classes = total_present + total_absent
+    total_classes = present + absent
+
+    if total_classes == 0:
+        st.warning("No attendance data available")
+        return
 
     attendance_percent = (
-        aggregate_present / total_classes * 100
+        present / total_classes * 100
     )
 
     remaining_percent = 100 - attendance_percent
@@ -107,7 +116,6 @@ def plot_attendance_percentage_pie(aggregate_present, total_present, total_absen
     plt.title("Aggregate Attendance Percentage")
 
     st.pyplot(plt)
-
     plt.close()
 
 # ---------------- MATH ----------------
@@ -116,7 +124,7 @@ def classes_needed(present, total, target):
     x = sp.symbols("x")
 
     sol = sp.solve(
-        (present+x)/(total+x)-target/100,
+        (present+x)/(total+x) - target/100,
         x
     )
 
@@ -139,34 +147,20 @@ def classes_can_leave(present, total, target):
 def generate_pdf(attendance, df):
 
     pdf = FPDF()
-
     pdf.add_page()
 
     pdf.set_font("Arial","B",16)
-
-    pdf.cell(
-        0,10,
-        "Attendance Report",
-        ln=True
-    )
+    pdf.cell(0,10,"Attendance Report",ln=True)
 
     pdf.set_font("Arial","",12)
-
-    pdf.cell(
-        0,10,
-        f"Aggregate Attendance: {attendance:.2f}%",
-        ln=True
-    )
+    pdf.cell(0,10,f"Aggregate Attendance: {attendance:.2f}%",ln=True)
 
     pdf.ln(5)
 
     for _,r in df.iterrows():
-
         pdf.cell(
             0,8,
-            clean_text(
-                f"{r['Subject']} : {r['Attendance%']}%"
-            ),
+            clean_text(f"{r['Subject']} : {r['Attendance%']}%"),
             ln=True
         )
 
@@ -182,10 +176,9 @@ if text:
 
     df = parse_attendance(text)
 
-    st.success("Attendance uploaded successfully🥳")
+    st.success("Attendance uploaded successfully 🥳")
 
     st.subheader("Subject-wise Attendance")
-
     st.dataframe(df)
 
     # ---------------- SUMMARY ----------------
@@ -200,9 +193,12 @@ if text:
         total_makeup
     )
 
+    # ✅ FIXED TOTAL CLASSES
     total_classes = (
         total_present +
-        total_absent
+        total_absent +
+        total_od +
+        total_makeup
     )
 
     aggregate_attendance = (
@@ -231,8 +227,7 @@ if text:
     # ---------------- PIE CHART ----------------
     plot_attendance_percentage_pie(
         aggregate_present,
-        total_present,
-        total_absent
+        total_classes - aggregate_present
     )
 
     # ---------------- TARGET OPTIMIZER ----------------
@@ -259,15 +254,12 @@ if text:
     )
 
     if aggregate_attendance < target:
-
         st.warning(
-            f"🥴Attend {need} classes to reach {target}% attendance"
+            f"🥴 Attend {need} classes to reach {target}% attendance"
         )
-
     else:
-
         st.success(
-            f"🥳You can leave {leave_safe} classes safely"
+            f"🥳 You can leave {leave_safe} classes safely"
         )
 
     # ---------------- LEAVE SIMULATOR ----------------
@@ -327,13 +319,10 @@ if text:
     )
 
     if row["Attendance%"] < target:
-
         st.warning(
             f"{subject}: Attend {sub_need} classes"
         )
-
     else:
-
         st.success(
             f"{subject}: Can leave {sub_leave} classes"
         )
@@ -348,4 +337,4 @@ if text:
         "Download PDF",
         pdf,
         "attendance_report.pdf"
-  )
+    )
